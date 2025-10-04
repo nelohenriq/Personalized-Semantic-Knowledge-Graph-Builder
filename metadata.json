@@ -1,0 +1,5 @@
+{
+  "name": "Personalized Semantic Knowledge Graph Builder",
+  "description": "An AI-powered tool to analyze learning materials and automatically build a personalized knowledge graph. It extracts concepts, identifies relationships, and visualizes connections to enhance learning and research.",
+  "requestFramePermissions": []
+}
