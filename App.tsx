@@ -11,7 +11,13 @@ import { GraphData, GraphLink, ApiProvider } from './types';
 import { extractKnowledgeGraph } from './services/geminiService';
 import { extractKnowledgeGraphOllama } from './services/ollamaService';
 import { extractKnowledgeGraphOpenRouter } from './services/openrouterService';
+import { extractKnowledgeGraphZai } from './services/zaiService';
 import AIProviderModal from './components/AIProviderModal';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure PDF.js worker from a CDN. This is required for the library to work.
+// Using a specific version for the worker for stability.
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://aistudiocdn.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs`;
 
 export type Tab = 'overview' | 'upload' | 'graph' | 'search' | 'learningPaths' | 'insights';
 
@@ -31,6 +37,8 @@ const App: React.FC = () => {
   
   // AI Provider State
   const [apiProvider, setApiProvider] = useState<ApiProvider>('zai');
+  const [zaiApiKey, setZaiApiKey] = useState<string>('');
+  const [zaiModel, setZaiModel] = useState<string>('glm-4.6');
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
   const [ollamaModel, setOllamaModel] = useState<string>('llama3');
   const [openrouterApiKey, setOpenrouterApiKey] = useState<string>('');
@@ -46,6 +54,8 @@ const App: React.FC = () => {
 
     // Load API settings
     setApiProvider(localStorage.getItem('apiProvider') as ApiProvider || 'zai');
+    setZaiApiKey(localStorage.getItem('zaiApiKey') || '');
+    setZaiModel(localStorage.getItem('zaiModel') || 'glm-4.6');
     setGeminiApiKey(localStorage.getItem('geminiApiKey') || '');
     setOllamaModel(localStorage.getItem('ollamaModel') || 'llama3');
     setOpenrouterApiKey(localStorage.getItem('openrouterApiKey') || '');
@@ -53,6 +63,8 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => { localStorage.setItem('apiProvider', apiProvider); }, [apiProvider]);
+  useEffect(() => { localStorage.setItem('zaiApiKey', zaiApiKey); }, [zaiApiKey]);
+  useEffect(() => { localStorage.setItem('zaiModel', zaiModel); }, [zaiModel]);
   useEffect(() => { localStorage.setItem('geminiApiKey', geminiApiKey); }, [geminiApiKey]);
   useEffect(() => { localStorage.setItem('ollamaModel', ollamaModel); }, [ollamaModel]);
   useEffect(() => { localStorage.setItem('openrouterApiKey', openrouterApiKey); }, [openrouterApiKey]);
@@ -73,6 +85,11 @@ const App: React.FC = () => {
   
   const handleFileUpload = async (file: File) => {
     if (!file) return;
+    if (apiProvider === 'zai' && !zaiApiKey) {
+      setError("Z.ai API Key is required. Please add it via the provider settings in the header.");
+      setIsProviderModalOpen(true);
+      return;
+    }
     if (apiProvider === 'openrouter' && !openrouterApiKey) {
       setError("OpenRouter API Key is required. Please add it via the provider settings in the header.");
       setIsProviderModalOpen(true);
@@ -89,7 +106,43 @@ const App: React.FC = () => {
     setStatusMessage("Reading and preparing document...");
     setGraphData({ nodes: [], links: [] }); // Clear previous graph
 
-    const text = await file.text();
+    let text = '';
+    try {
+      if (file.type === 'application/pdf') {
+        setStatusMessage("Extracting text from PDF...");
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const numPages = pdf.numPages;
+        let fullText = '';
+        for (let i = 1; i <= numPages; i++) {
+          setStatusMessage(`Reading page ${i} of ${numPages}...`);
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => ('str' in item ? item.str : '')).join(' ');
+          fullText += pageText + '\n\n'; // Add double newline between pages
+        }
+        text = fullText;
+      } else if (file.type === 'text/plain' || file.type === 'text/markdown') {
+        text = await file.text();
+      } else {
+        throw new Error(`Unsupported file type: ${file.type}. Please upload a PDF, TXT, or MD file.`);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred while reading the file.';
+      setError(`Failed to read or parse the file. ${errorMessage}`);
+      setIsLoading(false);
+      setStatusMessage("Error reading file.");
+      console.error(err);
+      return;
+    }
+
+    if (!text.trim()) {
+      setError("The document appears to be empty or contains no text.");
+      setIsLoading(false);
+      setStatusMessage("Processing failed: empty document.");
+      return;
+    }
+
     const chunks: string[] = [];
     for (let i = 0; i < text.length; i += CHUNK_SIZE - CHUNK_OVERLAP) {
       chunks.push(text.substring(i, i + CHUNK_SIZE));
@@ -109,10 +162,8 @@ const App: React.FC = () => {
         setStatusMessage(`Processing chunk ${index + 1} of ${chunks.length} with ${providerName}...`);
         let newGraphData;
         switch (apiProvider) {
-          case 'zai':
-            newGraphData = await extractKnowledgeGraph(chunk); break;
-          case 'google-gemini':
-            newGraphData = await extractKnowledgeGraph(chunk, geminiApiKey); break;
+          case 'zai': newGraphData = await extractKnowledgeGraphZai(chunk, zaiModel, zaiApiKey); break;
+          case 'google-gemini': newGraphData = await extractKnowledgeGraph(chunk, geminiApiKey); break;
           case 'ollama': newGraphData = await extractKnowledgeGraphOllama(chunk, ollamaModel); break;
           case 'openrouter': newGraphData = await extractKnowledgeGraphOpenRouter(chunk, openrouterModel, openrouterApiKey); break;
           default: throw new Error("Invalid API provider");
@@ -176,6 +227,8 @@ const App: React.FC = () => {
         return <SearchView 
           graphData={graphData} 
           apiProvider={apiProvider} 
+          zaiApiKey={zaiApiKey}
+          zaiModel={zaiModel}
           geminiApiKey={geminiApiKey}
           ollamaModel={ollamaModel} 
           openrouterApiKey={openrouterApiKey} 
@@ -191,14 +244,14 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`h-screen w-screen font-sans overflow-hidden flex flex-col bg-background text-foreground`}>
+    <div className={`h-full w-full font-sans flex flex-col bg-background text-foreground`}>
       <Header 
         theme={theme} 
         toggleTheme={toggleTheme} 
         apiProvider={apiProvider}
         onOpenProviderModal={() => setIsProviderModalOpen(true)}
       />
-      <div className='border-b border-border overflow-x-auto no-scrollbar'>
+      <div className='border-b border-border'>
         <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
       </div>
       <main className="flex-1 overflow-auto p-4 sm:p-8 bg-muted/30">
@@ -208,6 +261,8 @@ const App: React.FC = () => {
         isOpen={isProviderModalOpen}
         onClose={() => setIsProviderModalOpen(false)}
         apiProvider={apiProvider} onApiProviderChange={setApiProvider}
+        zaiApiKey={zaiApiKey} onZaiApiKeyChange={setZaiApiKey}
+        zaiModel={zaiModel} onZaiModelChange={setZaiModel}
         geminiApiKey={geminiApiKey} onGeminiApiKeyChange={setGeminiApiKey}
         ollamaModel={ollamaModel} onOllamaModelChange={setOllamaModel}
         openrouterApiKey={openrouterApiKey} onOpenrouterApiKeyChange={setOpenrouterApiKey}

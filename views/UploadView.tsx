@@ -70,7 +70,7 @@ const UploadView: React.FC<UploadViewProps> = ({
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     className="hidden"
-                    accept=".txt,.md"
+                    accept=".txt,.md,.pdf"
                     disabled={isLoading}
                 />
                 <div
@@ -89,15 +89,15 @@ const UploadView: React.FC<UploadViewProps> = ({
                     <p className="font-semibold text-foreground text-center">
                         <span className="text-primary">Drop files here</span> or click to browse
                     </p>
-                    <p className="text-sm text-muted-foreground mt-1 text-center">Currently supports .txt and .md files</p>
+                    <p className="text-sm text-muted-foreground mt-1 text-center">Supports PDF, TXT, and MD files</p>
                 </div>
             </Card>
              <Card className="max-w-2xl mx-auto">
                 <h3 className="text-lg font-semibold mb-4">Supported Formats</h3>
                 <div className="grid grid-cols-1 gap-y-4">
+                    <SupportedFormat format="PDF" description="Portable Document Format" />
                     <SupportedFormat format="TXT" description="Plain Text Files" />
                     <SupportedFormat format="MD" description="Markdown Documents" />
-                    <SupportedFormat format="PDF" description="Portable Document Format (coming soon)" />
                     <SupportedFormat format="DOCX" description="Word Documents (coming soon)" />
                 </div>
             </Card>

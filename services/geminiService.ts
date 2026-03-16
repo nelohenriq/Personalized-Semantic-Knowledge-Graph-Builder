@@ -1,16 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { GraphData, GraphLink, SearchResult, GraphNode } from '../types';
-
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  // This key is required for the built-in 'Z.ai' provider to function.
-  // The user-configurable 'Google Gemini' provider will use its own key.
-  console.warn("API_KEY environment variable not set. 'Z.ai' provider will not work.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY! });
 
 const responseSchema = {
   type: Type.OBJECT,
@@ -76,8 +65,30 @@ const searchResponseSchema = {
     required: ["answer", "relevant_nodes", "relevant_links"]
 };
 
+/**
+ * Parses known Gemini API errors into user-friendly messages.
+ * @param error The error object caught from the API call.
+ * @param context A string describing the operation that failed (e.g., 'knowledge graph extraction').
+ * @returns An Error object with a user-friendly message.
+ */
+function handleGeminiError(error: unknown, context: string): Error {
+    console.error(`Error calling Gemini API during ${context}:`, error);
 
-export async function extractKnowledgeGraph(text: string, apiKey?: string): Promise<GraphData> {
+    if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        if (message.includes('429') || message.includes('resource_exhausted') || message.includes('quota')) {
+            return new Error("You exceeded your Google Gemini API quota. Please check your plan and billing details, or wait and try again.");
+        }
+        if (message.includes('400') && message.includes('api key not valid')) {
+            return new Error("Authentication error: The provided Google Gemini API Key is invalid.");
+        }
+    }
+
+    return new Error(`Failed to ${context} with the Gemini API.`);
+}
+
+
+export async function extractKnowledgeGraph(text: string, apiKey: string): Promise<GraphData> {
     const prompt = `
     Analyze the following text and extract key concepts, entities, and their relationships to build a semantic knowledge graph.
     Identify the main topics and the connections between them. For each concept, provide a domain, a brief definition, and a snippet from the source text.
@@ -90,9 +101,12 @@ export async function extractKnowledgeGraph(text: string, apiKey?: string): Prom
     ---
     `;
 
+    if (!apiKey) {
+      throw new Error("Google Gemini API Key is required.");
+    }
+
     try {
-        const client = apiKey ? new GoogleGenAI({ apiKey }) : ai;
-        if (!apiKey && !API_KEY) throw new Error("API Key is not configured for Z.ai provider.");
+        const client = new GoogleGenAI({ apiKey });
 
         const response = await client.models.generateContent({
             model: "gemini-2.5-flash",
@@ -108,7 +122,6 @@ export async function extractKnowledgeGraph(text: string, apiKey?: string): Prom
 
         // Data validation and filtering
         const nodeIds = new Set(parsedData.nodes.map(node => node.id));
-        // Fix: Cast source and target to string for validation, as they are strings from the API response.
         const validLinks = parsedData.links.filter(link => 
           nodeIds.has(link.source as string) && nodeIds.has(link.target as string)
         );
@@ -116,13 +129,12 @@ export async function extractKnowledgeGraph(text: string, apiKey?: string): Prom
         return { nodes: parsedData.nodes, links: validLinks };
 
     } catch (error) {
-        console.error("Error calling Gemini API:", error);
-        throw new Error("Failed to generate knowledge graph from Gemini API.");
+        throw handleGeminiError(error, "generate knowledge graph");
     }
 }
 
 
-export async function performSemanticSearch(query: string, graphData: GraphData, apiKey?: string): Promise<SearchResult> {
+export async function performSemanticSearch(query: string, graphData: GraphData, apiKey: string): Promise<SearchResult> {
     const prompt = `
     You are an intelligent assistant for a knowledge graph application. Your task is to answer questions based *only* on the provided knowledge graph data.
     
@@ -144,9 +156,12 @@ export async function performSemanticSearch(query: string, graphData: GraphData,
     5.  Return your findings in the specified JSON format.
     `;
 
+    if (!apiKey) {
+      throw new Error("Google Gemini API Key is required.");
+    }
+
     try {
-        const client = apiKey ? new GoogleGenAI({ apiKey }) : ai;
-        if (!apiKey && !API_KEY) throw new Error("API Key is not configured for Z.ai provider.");
+        const client = new GoogleGenAI({ apiKey });
 
         const response = await client.models.generateContent({
             model: "gemini-2.5-flash",
@@ -178,7 +193,6 @@ export async function performSemanticSearch(query: string, graphData: GraphData,
         };
 
     } catch (error) {
-        console.error("Error calling Gemini API for semantic search:", error);
-        throw new Error("Failed to perform semantic search with Gemini API.");
+        throw handleGeminiError(error, "perform semantic search");
     }
 }

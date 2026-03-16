@@ -19,7 +19,7 @@ interface ProviderOption {
 }
 
 const PROVIDERS: ProviderOption[] = [
-  { id: 'zai', name: 'Z.ai', description: 'Built-in AI provider for web development', icon: ZaiIcon, status: 'ready' },
+  { id: 'zai', name: 'Z.ai', description: 'Powerful models like GLM from Zhipu AI', icon: ZaiIcon, status: 'key_required' },
   { id: 'google-gemini', name: 'Google Gemini', description: "Google's powerful AI model", icon: GeminiIcon, status: 'key_required' },
   { id: 'openrouter', name: 'OpenRouter', description: 'Access to multiple AI models including free options', icon: OpenRouterIcon, status: 'key_required' },
   { id: 'ollama', name: 'Ollama (Local)', description: 'Run AI models locally - fetches available models', icon: OllamaIcon, status: 'ready' }
@@ -30,6 +30,10 @@ interface AIProviderModalProps {
   onClose: () => void;
   apiProvider: ApiProvider;
   onApiProviderChange: (provider: ApiProvider) => void;
+  zaiApiKey: string;
+  onZaiApiKeyChange: (key: string) => void;
+  zaiModel: string;
+  onZaiModelChange: (model: string) => void;
   geminiApiKey: string;
   onGeminiApiKeyChange: (key: string) => void;
   ollamaModel: string;
@@ -61,17 +65,20 @@ const ProviderCard: React.FC<{ provider: ProviderOption; isActive: boolean; onCl
 
 const AIProviderModal: React.FC<AIProviderModalProps> = ({
     isOpen, onClose, apiProvider, onApiProviderChange,
+    zaiApiKey, onZaiApiKeyChange, zaiModel, onZaiModelChange,
     geminiApiKey, onGeminiApiKeyChange,
     ollamaModel, onOllamaModelChange, openrouterApiKey, onOpenrouterApiKeyChange,
     openrouterModel, onOpenrouterModelChange
 }) => {
-    // State for Ollama connection and models
     const [ollamaModels, setOllamaModels] = useState<string[]>([]);
     const [ollamaStatus, setOllamaStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [ollamaError, setOllamaError] = useState<string | null>(null);
 
     const providersWithStatus = React.useMemo(() => {
         return PROVIDERS.map(p => {
+            if (p.id === 'zai') {
+                return { ...p, status: zaiApiKey ? 'ready' : 'key_required' };
+            }
             if (p.id === 'google-gemini') {
                 return { ...p, status: geminiApiKey ? 'ready' : 'key_required' };
             }
@@ -80,7 +87,7 @@ const AIProviderModal: React.FC<AIProviderModalProps> = ({
             }
             return p;
         });
-    }, [geminiApiKey, openrouterApiKey]);
+    }, [zaiApiKey, geminiApiKey, openrouterApiKey]);
 
     const fetchAndSetOllamaModels = async () => {
         setOllamaStatus('loading');
@@ -105,11 +112,9 @@ const AIProviderModal: React.FC<AIProviderModalProps> = ({
     };
     
     React.useEffect(() => {
-        // Fetch models when modal is opened for Ollama provider
         if (isOpen && apiProvider === 'ollama' && ollamaStatus === 'idle') {
             fetchAndSetOllamaModels();
         }
-        // Reset status if modal is closed or provider changes away from Ollama
         if (!isOpen || apiProvider !== 'ollama') {
             setOllamaStatus('idle');
         }
@@ -119,13 +124,18 @@ const AIProviderModal: React.FC<AIProviderModalProps> = ({
     if (!isOpen) return null;
 
     const handleProviderClick = (providerId: ApiProvider) => {
-        onApiProviderChange(providerId); // Make selection active immediately
+        onApiProviderChange(providerId);
     };
     
     const currentConfig = {
         provider: PROVIDERS.find(p => p.id === apiProvider)?.name || 'N/A',
-        model: apiProvider === 'ollama' ? ollamaModel : apiProvider === 'openrouter' ? openrouterModel.replace(':free', '') : 'gemini-2.5-flash',
-        apiUrl: apiProvider === 'ollama' ? 'http://localhost:11434' : apiProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://generativelanguage.googleapis.com'
+        model: apiProvider === 'ollama' ? ollamaModel : 
+               apiProvider === 'openrouter' ? openrouterModel.replace(':free', '') : 
+               apiProvider === 'zai' ? zaiModel : 'gemini-2.5-flash',
+        apiUrl: apiProvider === 'ollama' ? 'http://localhost:11434' : 
+                apiProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 
+                apiProvider === 'zai' ? 'https://api.z.ai/api' :
+                'https://generativelanguage.googleapis.com'
     };
     
     const renderOllamaStatus = () => {
@@ -166,6 +176,33 @@ const AIProviderModal: React.FC<AIProviderModalProps> = ({
                     </div>
                 
                     <div className="space-y-4">
+                        {apiProvider === 'zai' && (
+                            <>
+                                <div>
+                                    <label htmlFor="zai-apikey" className="font-medium mb-2 text-sm block">Z.ai API Key</label>
+                                    <input
+                                        type="password"
+                                        id="zai-apikey"
+                                        value={zaiApiKey}
+                                        onChange={e => onZaiApiKeyChange(e.target.value)}
+                                        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring transition"
+                                        placeholder="Enter your Z.ai API Key"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1">Stored locally in your browser.</p>
+                                </div>
+                                <div>
+                                    <label htmlFor="zai-model" className="font-medium mb-2 text-sm block">Z.ai Model</label>
+                                    <input
+                                        type="text"
+                                        id="zai-model"
+                                        value={zaiModel}
+                                        onChange={e => onZaiModelChange(e.target.value)}
+                                        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring transition"
+                                        placeholder="e.g., glm-4.6"
+                                    />
+                                </div>
+                            </>
+                        )}
                         {apiProvider === 'google-gemini' && (
                             <div>
                                 <label htmlFor="gemini-apikey" className="font-medium mb-2 text-sm block">Google Gemini API Key</label>

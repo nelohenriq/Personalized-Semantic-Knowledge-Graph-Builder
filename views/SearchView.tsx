@@ -4,6 +4,7 @@ import { GraphData, SearchResult, ApiProvider } from '../types';
 import { performSemanticSearch } from '../services/geminiService';
 import { performSemanticSearchOllama } from '../services/ollamaService';
 import { performSemanticSearchOpenRouter } from '../services/openrouterService';
+import { performSemanticSearchZai } from '../services/zaiService';
 import { SearchIcon } from '../components/icons/SearchIcon';
 import { SparklesIcon } from '../components/icons/SparklesIcon';
 import { ConceptsIcon } from '../components/icons/ConceptsIcon';
@@ -12,13 +13,17 @@ import { RelationshipsIcon } from '../components/icons/RelationshipsIcon';
 interface SearchViewProps {
     graphData: GraphData;
     apiProvider: ApiProvider;
+    zaiApiKey: string;
+    zaiModel: string;
     geminiApiKey: string;
     ollamaModel: string;
     openrouterApiKey: string;
     openrouterModel: string;
 }
 
-const SearchView: React.FC<SearchViewProps> = ({ graphData, apiProvider, geminiApiKey, ollamaModel, openrouterApiKey, openrouterModel }) => {
+const SearchView: React.FC<SearchViewProps> = ({ 
+    graphData, apiProvider, zaiApiKey, zaiModel, geminiApiKey, ollamaModel, openrouterApiKey, openrouterModel 
+}) => {
     const [query, setQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -40,7 +45,10 @@ const SearchView: React.FC<SearchViewProps> = ({ graphData, apiProvider, geminiA
             let result;
             switch (apiProvider) {
                 case 'zai':
-                    result = await performSemanticSearch(query, graphData);
+                    if (!zaiApiKey) {
+                        throw new Error("Z.ai API Key is required. Please add it in the provider settings.");
+                    }
+                    result = await performSemanticSearchZai(query, graphData, zaiModel, zaiApiKey);
                     break;
                 case 'google-gemini':
                     if (!geminiApiKey) {

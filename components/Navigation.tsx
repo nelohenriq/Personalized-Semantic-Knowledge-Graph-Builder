@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Tab } from '../App';
 
 interface NavigationProps {
@@ -16,12 +16,66 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
+    const navRef = useRef<HTMLElement>(null);
+
+    useEffect(() => {
+        const slider = navRef.current;
+        if (!slider) return;
+
+        let isDown = false;
+        let startX: number;
+        let scrollLeft: number;
+
+        const handleMouseDown = (e: MouseEvent) => {
+            isDown = true;
+            slider.classList.add('active');
+            startX = e.pageX - slider.offsetLeft;
+            scrollLeft = slider.scrollLeft;
+        };
+
+        const handleMouseLeave = () => {
+            isDown = false;
+            slider.classList.remove('active');
+        };
+
+        const handleMouseUp = () => {
+            isDown = false;
+            slider.classList.remove('active');
+        };
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - slider.offsetLeft;
+            const walk = (x - startX) * 2; //scroll-fast
+            slider.scrollLeft = scrollLeft - walk;
+        };
+
+        slider.addEventListener('mousedown', handleMouseDown);
+        slider.addEventListener('mouseleave', handleMouseLeave);
+        slider.addEventListener('mouseup', handleMouseUp);
+        slider.addEventListener('mousemove', handleMouseMove);
+
+        return () => {
+            slider.removeEventListener('mousedown', handleMouseDown);
+            slider.removeEventListener('mouseleave', handleMouseLeave);
+            slider.removeEventListener('mouseup', handleMouseUp);
+            slider.removeEventListener('mousemove', handleMouseMove);
+        };
+    }, []);
+
+
     return (
-        <nav className="flex items-center space-x-2 sm:space-x-4 whitespace-nowrap -mb-px px-4 sm:px-8">
+        <nav
+            ref={navRef}
+            className="flex items-center space-x-2 sm:space-x-4 whitespace-nowrap -mb-px px-4 sm:px-8 overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing select-none"
+        >
             {TABS.map((tab) => (
                  <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
+                    // Prevent text selection while dragging
+                    onMouseDown={(e) => e.preventDefault()}
                     className={`flex-shrink-0 px-3 py-4 text-sm font-medium relative transition-colors ${
                         activeTab === tab.id 
                         ? 'text-primary' 

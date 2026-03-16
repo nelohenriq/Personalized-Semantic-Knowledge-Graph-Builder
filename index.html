@@ -95,6 +95,14 @@
         --destructive-foreground: hsl(0 0% 98%);
       }
 
+      html, body, #root {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+      }
+
       body {
         font-family: 'Inter', sans-serif;
         background-color: var(--background);
@@ -124,10 +132,12 @@
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.22.0",
     "d3-force": "https://aistudiocdn.com/d3-force@^3.0.0",
-    "d3": "https://aistudiocdn.com/d3@^7.9.0"
+    "d3": "https://aistudiocdn.com/d3@^7.9.0",
+    "pdfjs-dist": "https://aistudiocdn.com/pdfjs-dist@4.4.168/build/pdf.mjs"
   }
 }
 </script>
+<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>
